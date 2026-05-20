@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0a12">
+<title>TERRA</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#05050a;font-family:'Jost',sans-serif;color:#e8e8f0}
+canvas{display:block;position:fixed;inset:0}
+.screen{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;background:radial-gradient(ellipse at 50% 40%,#15151f 0%,#05050a 75%);
+  transition:opacity 1.4s ease;padding:24px;text-align:center}
+.fade-out{opacity:0;pointer-events:none}.hidden{display:none!important}
+h1{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(3rem,14vw,7rem);
+  letter-spacing:.35em;margin-bottom:.1em;color:#f4f4fa;text-shadow:0 0 40px rgba(180,200,255,.25)}
+.sub{font-weight:300;font-size:clamp(.8rem,3.4vw,1.05rem);letter-spacing:.5em;
+  text-transform:uppercase;color:#8a8aa5;margin-bottom:3.5em}
+.field{display:flex;flex-direction:column;gap:14px;align-items:center;width:min(340px,86vw)}
+input{background:rgba(255,255,255,.04);border:1px solid rgba(180,200,255,.18);border-radius:2px;
+  padding:15px 18px;color:#f0f0f5;font-family:'Jost',sans-serif;font-size:1rem;width:100%;
+  text-align:center;letter-spacing:.12em;transition:border-color .3s}
+input:focus{outline:none;border-color:rgba(180,200,255,.55)}
+input::placeholder{color:#55556a;letter-spacing:.18em}
+button{background:transparent;border:1px solid rgba(180,200,255,.3);border-radius:2px;
+  color:#dcdcec;font-family:'Jost',sans-serif;font-weight:400;font-size:.95rem;
+  letter-spacing:.22em;text-transform:uppercase;padding:15px 40px;cursor:pointer;width:100%;
+  transition:all .4s ease}
+button:hover{background:rgba(180,200,255,.07);border-color:rgba(180,200,255,.6);
+  letter-spacing:.28em;box-shadow:0 0 30px rgba(150,180,255,.15)}
+button.primary{border-color:rgba(180,210,255,.5);color:#fff}
+.sep{color:#44445a;font-size:.78rem;letter-spacing:.3em;margin:6px 0}
+.hint{margin-top:2.6em;font-weight:300;font-size:.82rem;color:#5a5a72;
+  letter-spacing:.06em;line-height:1.9;max-width:380px}
+.hint b{color:#9a9ab8;font-weight:500}
+
+#hud{position:fixed;inset:0;z-index:20;pointer-events:none;opacity:0;transition:opacity 2s ease 1s}
+#hud.show{opacity:1}
+#code-tag{position:absolute;top:20px;left:50%;transform:translateX(-50%);
+  font-weight:300;font-size:.78rem;letter-spacing:.34em;color:rgba(200,210,240,.4);text-transform:uppercase}
+#code-tag b{color:rgba(220,225,255,.75);font-weight:500;letter-spacing:.42em}
+#peers{position:absolute;top:20px;right:24px;font-weight:300;font-size:.78rem;
+  letter-spacing:.18em;color:rgba(200,210,240,.4)}
+#life-wrap{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);
+  width:min(420px,76vw);text-align:center}
+#life-label{font-weight:300;font-size:.72rem;letter-spacing:.42em;text-transform:uppercase;
+  color:rgba(200,210,240,.45);margin-bottom:9px}
+#life-track{height:2px;background:rgba(255,255,255,.07);position:relative;overflow:visible}
+#life-fill{position:absolute;left:0;top:0;height:100%;width:0;
+  background:linear-gradient(90deg,#5a7ad8,#7ad8b0,#e8d88a);
+  box-shadow:0 0 16px rgba(140,200,255,.6);transition:width 1s ease}
+#guide{position:absolute;bottom:78px;left:50%;transform:translateX(-50%);
+  font-weight:300;font-size:.86rem;letter-spacing:.16em;color:rgba(220,225,255,.55);
+  text-align:center;transition:opacity 1s;max-width:80vw}
+.toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:60;
+  font-weight:300;letter-spacing:.2em;font-size:.85rem;color:rgba(230,235,255,.7);
+  background:rgba(20,20,32,.6);backdrop-filter:blur(10px);border:1px solid rgba(180,200,255,.15);
+  padding:12px 26px;border-radius:2px;opacity:0;transition:opacity .5s}
+
+#climax{position:fixed;inset:0;z-index:70;display:none;flex-direction:column;
+  align-items:center;justify-content:center;background:rgba(8,8,16,0);
+  transition:background 3s ease;text-align:center;padding:24px}
+#climax.show{display:flex}
+#climax h2{font-family:'Cormorant Garamond',serif;font-weight:300;
+  font-size:clamp(2rem,9vw,4rem);letter-spacing:.22em;color:#fff;opacity:0;
+  transition:opacity 3s ease 1.5s;text-shadow:0 0 50px rgba(200,220,255,.5)}
+#climax p{font-weight:300;letter-spacing:.24em;color:rgba(220,225,255,.6);
+  margin-top:1.4em;opacity:0;transition:opacity 2s ease 3.5s;font-size:.95rem}
+#climax .seedbox{margin-top:2.4em;font-family:'Jost';font-weight:300;font-size:.8rem;
+  letter-spacing:.2em;color:rgba(200,210,240,.5);opacity:0;transition:opacity 2s ease 4.5s}
+#climax button{margin-top:2.4em;width:auto;opacity:0;transition:opacity 2s ease 5s}
+.controls-note{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:21;
+  font-weight:300;font-size:.7rem;letter-spacing:.18em;color:rgba(180,190,220,.28);
+  pointer-events:none;opacity:0;transition:opacity 2s ease 2s}
+.controls-note.show{opacity:1}
+
+#loader{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
+  background:#05050a;color:#8a8aa5;font-weight:300;letter-spacing:.3em;font-size:.85rem;
+  text-transform:uppercase;transition:opacity .8s}
+#loader.hide{opacity:0;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="loader">éveil du monde…</div>
+<canvas id="c"></canvas>
+
+<div id="entry" class="screen hidden">
+  <h1>TERRA</h1>
+  <div class="sub">un monde attend</div>
+  <div class="field">
+    <input id="nameIn" placeholder="ton nom" maxlength="14" autocomplete="off">
+    <button class="primary" onclick="doCreate()">éveiller un monde</button>
+    <div class="sep">— ou —</div>
+    <input id="codeIn" placeholder="code du monde" maxlength="4" autocomplete="off" style="text-transform:uppercase">
+    <button onclick="doJoin()">rejoindre</button>
+  </div>
+  <div class="hint">
+    Vous êtes des présences de lumière sur un monde éteint.<br>
+    <b>Seul, vous ne pouvez presque rien.</b><br>
+    Approchez-vous d'un autre. Chantez ensemble.<br>
+    La vie reviendra — et vous l'aurez fait <b>ensemble</b>.
+  </div>
+</div>
+
+<div id="hud">
+  <div id="code-tag">monde <b id="codeShow">····</b></div>
+  <div id="peers">· 1 ·</div>
+  <div id="guide">approchez un autre voyageur et maintenez <b>ESPACE</b> / <b>toucher</b> pour chanter</div>
+  <div id="life-wrap">
+    <div id="life-label">vie du monde</div>
+    <div id="life-track"><div id="life-fill"></div></div>
+  </div>
+</div>
+<div class="controls-note" id="ctrlNote">déplacement : ZQSD / flèches / glisser &nbsp;·&nbsp; chant : ESPACE / toucher maintenu</div>
+<div class="toast" id="toast"></div>
+
+<div id="climax">
+  <h2 id="climaxTitle">le monde respire</h2>
+  <p id="climaxText">vous avez ramené la vie. ensemble.</p>
+  <div class="seedbox" id="seedBox"></div>
+  <button onclick="location.reload()">recommencer ailleurs</button>
+</div>
+
+<!-- LIBRARIES (CDN, all open source, browser-compatible UMD builds) -->
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/objects/Sky.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/simplex-noise@3.0.1/simplex-noise.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
+
+<script>
+// ============================================================================
+//  TERRA — client v2 — with bloom post-processing, Tone.js music, simplex noise
+//  Deterministic world from shared seed. Network = positions + bloom events.
+// ============================================================================
+
+// ---------- seeded RNG ----------
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+// Wait for libraries to load (with timeout in case a CDN fails)
+let _libWaitStart=Date.now();
+function waitLibs(cb){
+  if(typeof THREE!=='undefined' && THREE.UnrealBloomPass && THREE.Sky &&
+     typeof SimplexNoise!=='undefined' && typeof Tone!=='undefined'){cb();return;}
+  if(Date.now()-_libWaitStart>15000){
+    // Diagnose what's missing
+    const missing=[];
+    if(typeof THREE==='undefined') missing.push('THREE');
+    else{
+      if(!THREE.EffectComposer) missing.push('EffectComposer');
+      if(!THREE.UnrealBloomPass) missing.push('UnrealBloomPass');
+      if(!THREE.Sky) missing.push('Sky');
+    }
+    if(typeof SimplexNoise==='undefined') missing.push('SimplexNoise');
+    if(typeof Tone==='undefined') missing.push('Tone');
+    document.getElementById('loader').innerHTML=
+      'Erreur de chargement.<br><br>'+
+      'Manquant : '+missing.join(', ')+'<br><br>'+
+      'Vérifie ta connexion internet,<br>puis recharge la page.';
+    return;
+  }
+  setTimeout(()=>waitLibs(cb),60);
+}
+
+let socket, SEED=12345, rng, myId=null, roomCode=null, isHost=false;
+let scene,camera,renderer,composer,bloomPass,clock;
+let me={x:0,z:0,vx:0,vz:0};
+let peers={}, peerMeshes={};
+let blooms=[];
+let worldLife=0, displayLife=0;
+let singing=false, started=false, climaxDone=false;
+let sky, sunDir, ambient, sunLight;
+let _terrain=null;
+let motes=[];
+
+waitLibs(()=>{
+  // unhide entry after libs loaded
+  document.getElementById('loader').classList.add('hide');
+  document.getElementById('entry').classList.remove('hidden');
+  // connect socket
+  socket=io();
+  socket.on('errmsg',m=>toast(m));
+  socket.on('joined',d=>{
+    myId=d.id;roomCode=d.code;isHost=d.isHost;SEED=d.seed;rng=mulberry32(SEED);
+    document.getElementById('codeShow').textContent=d.code;
+    beginWorld();
+  });
+  socket.on('peer_count',n=>{document.getElementById('peers').textContent='· '+n+' ·';});
+  socket.on('sync_blooms',list=>{ list.forEach(b=>spawnBloom(b.x,b.z,b.power,true)); });
+  socket.on('state',s=>{ peers=s.players||{}; worldLife=s.life||0; });
+  socket.on('bloom',d=>{
+    spawnBloom(d.x,d.z,d.power,false);
+    worldLife=d.life;
+    audioBloom(d.power,d.n);
+    hideGuideSoon();
+  });
+  socket.on('climax',d=>{ triggerClimax(d.seed,d.blooms); });
+});
+
+function toast(t){const e=document.getElementById('toast');e.textContent=t;
+  e.style.opacity='1';clearTimeout(e._t);e._t=setTimeout(()=>e.style.opacity='0',2600);}
+function doCreate(){const n=document.getElementById('nameIn').value.trim();
+  if(!socket){toast('chargement…');return;}socket.emit('create',{name:n});}
+function doJoin(){
+  if(!socket){toast('chargement…');return;}
+  const c=document.getElementById('codeIn').value.trim().toUpperCase();
+  const n=document.getElementById('nameIn').value.trim();
+  if(c.length<4){toast('code incomplet');return;}
+  socket.emit('join',{code:c,name:n});
+}
+
+// ============================================================================
+//   WORLD INITIALIZATION
+// ============================================================================
+function beginWorld(){
+  document.getElementById('entry').classList.add('fade-out');
+  setTimeout(()=>document.getElementById('entry').classList.add('hidden'),1400);
+  document.getElementById('hud').classList.add('show');
+  document.getElementById('ctrlNote').classList.add('show');
+
+  scene=new THREE.Scene();
+  scene.fog=new THREE.FogExp2(0x0a0a14,0.014);
+  camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,2000);
+  renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure=0.6;  // start dim (dead world)
+  renderer.outputEncoding=THREE.sRGBEncoding;
+  clock=new THREE.Clock();
+
+  // ---- POST-PROCESSING (the bloom that makes it gorgeous) ----
+  composer=new THREE.EffectComposer(renderer);
+  composer.addPass(new THREE.RenderPass(scene,camera));
+  bloomPass=new THREE.UnrealBloomPass(
+    new THREE.Vector2(innerWidth,innerHeight),
+    0.6,   // strength (will rise with worldLife)
+    0.85,  // radius
+    0.18   // threshold — only bright things bloom
+  );
+  composer.addPass(bloomPass);
+
+  // ---- LIGHTS (cold & dim at first; warm as world heals) ----
+  ambient=new THREE.AmbientLight(0x4a5070,0.55);
+  scene.add(ambient);
+  sunLight=new THREE.DirectionalLight(0x9aa8c0,0.4);
+  sunLight.position.set(60,80,40);
+  scene.add(sunLight);
+
+  // ---- ATMOSPHERIC SKY (Three.js Sky shader — real Rayleigh scattering) ----
+  sky=new THREE.Sky();
+  sky.scale.setScalar(1000);
+  scene.add(sky);
+  sunDir=new THREE.Vector3();
+  // start: pre-dawn / overcast feel
+  setSkyParams({
+    turbidity:8, rayleigh:0.5, mieCoefficient:0.005,
+    mieDirectionalG:0.7, elevation:6, azimuth:140
+  });
+
+  // ---- STARS (pinpoints of hope visible through the haze) ----
+  const sg=new THREE.BufferGeometry();const sp=[];
+  const sr=mulberry32(SEED^0xDEAD);
+  for(let i=0;i<800;i++){
+    const r=400,th=sr()*Math.PI*2,ph=sr()*Math.PI*0.45;
+    sp.push(Math.cos(th)*Math.sin(ph)*r, Math.cos(ph)*r*0.8+80, Math.sin(th)*Math.sin(ph)*r);
+  }
+  sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
+  scene.add(new THREE.Points(sg,new THREE.PointsMaterial({
+    color:0xccd6ff,size:0.9,transparent:true,opacity:0.65,sizeAttenuation:false
+  })));
+
+  // ---- TERRAIN (Simplex noise — real organic geometry) ----
+  buildTerrain();
+
+  // ---- ME (a glowing presence) ----
+  myMesh=makePresence(0xa8c8ff);
+  scene.add(myMesh);
+
+  addEventListener('resize',()=>{
+    camera.aspect=innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
+    composer.setSize(innerWidth,innerHeight);
+  });
+
+  started=true;
+  audioInit();
+  requestAnimationFrame(loop);
+}
+
+function setSkyParams(p){
+  const u=sky.material.uniforms;
+  u.turbidity.value=p.turbidity;
+  u.rayleigh.value=p.rayleigh;
+  u.mieCoefficient.value=p.mieCoefficient;
+  u.mieDirectionalG.value=p.mieDirectionalG;
+  const phi=THREE.MathUtils.degToRad(90-p.elevation);
+  const theta=THREE.MathUtils.degToRad(p.azimuth);
+  sunDir.setFromSphericalCoords(1,phi,theta);
+  u.sunPosition.value.copy(sunDir);
+  if(sunLight) sunLight.position.copy(sunDir).multiplyScalar(100);
+}
+
+// ============================================================================
+//   TERRAIN — simplex noise heightmap with desaturated palette
+// ============================================================================
+function buildTerrain(){
+  const SIZE=260, SEG=170;
+  const g=new THREE.PlaneGeometry(SIZE,SIZE,SEG,SEG);
+  g.rotateX(-Math.PI/2);
+  const noiseA=new SimplexNoise(mulberry32(SEED));
+  const noiseB=new SimplexNoise(mulberry32(SEED^0x12345));
+  const pos=g.attributes.position;
+  const colors=[];
+  function h(x,z){
+    // multi-octave simplex — natural rolling terrain
+    let y=0;
+    y+=noiseA.noise2D(x*0.012,z*0.012)*9;
+    y+=noiseA.noise2D(x*0.04, z*0.04)*2.5;
+    y+=noiseB.noise2D(x*0.08,z*0.08)*1.2;
+    y+=noiseB.noise2D(x*0.18,z*0.18)*0.4;
+    return y;
+  }
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i),z=pos.getZ(i);
+    const y=h(x,z);
+    pos.setY(i,y);
+    // dead palette: cool desaturated grey, slight variation
+    const v=0.16+(noiseA.noise2D(x*0.06,z*0.06)*0.5+0.5)*0.06;
+    colors.push(v*0.95, v*1.0, v*1.18);
+  }
+  g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+  g.computeVertexNormals();
+  const mat=new THREE.MeshStandardMaterial({
+    vertexColors:true, roughness:0.95, metalness:0,
+    flatShading:false
+  });
+  const mesh=new THREE.Mesh(g,mat);
+  scene.add(mesh);
+  _terrain={geo:g,mat,mesh,size:SIZE,seg:SEG,heightAt:h};
+}
+
+// ============================================================================
+//   PRESENCE — a glowing being (you & peers)
+// ============================================================================
+let myMesh;
+function makePresence(color){
+  const grp=new THREE.Group();
+  const c=new THREE.Color(color);
+  // bright emissive core — UnrealBloomPass will make it GLOW
+  const coreMat=new THREE.MeshBasicMaterial({color:c});
+  const core=new THREE.Mesh(new THREE.SphereGeometry(0.55,24,24),coreMat);
+  grp.add(core);
+  // softer outer halo
+  const halo=new THREE.Mesh(new THREE.SphereGeometry(1.4,20,20),
+    new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.18}));
+  grp.add(halo);
+  // huge faint glow disc on ground (gives a "they're here" feeling from far)
+  const disc=new THREE.Mesh(new THREE.CircleGeometry(3,32),
+    new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.15,
+      side:THREE.DoubleSide,depthWrite:false}));
+  disc.rotation.x=-Math.PI/2;disc.position.y=-1.7;
+  grp.add(disc);
+  const light=new THREE.PointLight(c,2.2,28);
+  grp.add(light);
+  grp.userData={core,halo,light,disc,baseColor:c.clone()};
+  return grp;
+}
+
+// ============================================================================
+//   BLOOM — life awakens (procedural flora cluster + terrain heal)
+// ============================================================================
+function spawnBloom(x,z,power,instant){
+  const y=_terrain?_terrain.heightAt(x,z):0;
+  const grp=new THREE.Group();
+  grp.position.set(x,y,z);
+
+  const hue=0.28+rng()*0.20;                   // green→teal range
+  const baseCol=new THREE.Color().setHSL(hue,0.55,0.5);
+
+  // Multiple trees clustered around the bloom centre
+  const trees=Math.min(14, 3+Math.floor(power*1.5));
+  for(let i=0;i<trees;i++){
+    const a=rng()*Math.PI*2, rad=rng()*(power*1.1+0.5);
+    const tx=Math.cos(a)*rad, tz=Math.sin(a)*rad;
+    grp.add(makeTree(tx,tz,hue,power));
+  }
+
+  // Glowing wildflowers
+  const flowers=Math.min(40,8+Math.floor(power*5));
+  for(let i=0;i<flowers;i++){
+    const a=rng()*Math.PI*2, rad=rng()*power*1.5;
+    const fx=Math.cos(a)*rad, fz=Math.sin(a)*rad;
+    grp.add(makeFlower(fx,fz,hue));
+  }
+
+  // Bright ground ring (will bloom intensely with post-processing)
+  const ring=new THREE.Mesh(
+    new THREE.RingGeometry(0.1,power*1.8,48),
+    new THREE.MeshBasicMaterial({color:baseCol,transparent:true,opacity:0.55,
+      side:THREE.DoubleSide,depthWrite:false}));
+  ring.rotation.x=-Math.PI/2;ring.position.y=0.05;
+  grp.add(ring);
+
+  // Soft warm point light
+  const gl=new THREE.PointLight(baseCol.getHex(),power*0.7,power*8);
+  gl.position.y=2.5;grp.add(gl);
+
+  grp.scale.setScalar(instant?1:0.001);
+  scene.add(grp);
+  blooms.push({x,z,power,grow:instant?1:0,group:grp,ring,col:baseCol,hue});
+
+  // Heal terrain locally
+  healTerrain(x,z,power*2.6,hue);
+
+  // Burst of light motes
+  spawnMotes(x,y+1,z,baseCol,Math.floor(16+power*5));
+}
+
+function makeTree(x,z,hue,power){
+  const g=new THREE.Group();
+  g.position.set(x,0,z);
+  // Trunk: tapered cylinder
+  const hgt=1.8+rng()*power*0.6;
+  const trunkCol=new THREE.Color().setHSL(0.07+rng()*0.04,0.4,0.18);
+  const trunk=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.08,0.20,hgt,7),
+    new THREE.MeshStandardMaterial({color:trunkCol,roughness:1}));
+  trunk.position.y=hgt/2;
+  g.add(trunk);
+  // Canopy: 1-3 stacked icosahedrons for organic feel
+  const layers=1+Math.floor(rng()*2);
+  for(let i=0;i<=layers;i++){
+    const r=0.55+rng()*0.55-i*0.08;
+    const ch=hgt+0.4+i*0.55;
+    const cHue=hue+(rng()-0.5)*0.08;
+    const cCol=new THREE.Color().setHSL(cHue,0.55+rng()*0.15,0.45+rng()*0.15);
+    const canopy=new THREE.Mesh(
+      new THREE.IcosahedronGeometry(r,0),
+      new THREE.MeshStandardMaterial({
+        color:cCol,
+        emissive:cCol,
+        emissiveIntensity:0.45,
+        roughness:0.85,
+        flatShading:true
+      }));
+    canopy.position.y=ch;
+    canopy.userData.base=ch;
+    canopy.userData.swayPhase=rng()*Math.PI*2;
+    g.add(canopy);
+  }
+  return g;
+}
+
+function makeFlower(x,z,hue){
+  const g=new THREE.Group();
+  g.position.set(x,0,z);
+  // Stem
+  const stem=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.02,0.03,0.4,4),
+    new THREE.MeshStandardMaterial({color:0x4a5a3a,roughness:1}));
+  stem.position.y=0.2;
+  g.add(stem);
+  // Petal blob (glowing) - shift hue from leaves for contrast
+  const pHue=(hue+0.45+rng()*0.2)%1;
+  const pCol=new THREE.Color().setHSL(pHue,0.85,0.6);
+  const petals=new THREE.Mesh(
+    new THREE.SphereGeometry(0.09,6,6),
+    new THREE.MeshBasicMaterial({color:pCol}));
+  petals.position.y=0.45;
+  g.add(petals);
+  return g;
+}
+
+function healTerrain(cx,cz,radius,hue){
+  if(!_terrain)return;
+  const pos=_terrain.geo.attributes.position;
+  const colr=_terrain.geo.attributes.color;
+  const tgt=new THREE.Color().setHSL(hue,0.40,0.30);
+  for(let i=0;i<pos.count;i++){
+    const dx=pos.getX(i)-cx, dz=pos.getZ(i)-cz;
+    const d=Math.hypot(dx,dz);
+    if(d<radius){
+      const k=Math.pow(1-d/radius,1.5)*0.7;
+      colr.setX(i,colr.getX(i)*(1-k)+tgt.r*k);
+      colr.setY(i,colr.getY(i)*(1-k)+tgt.g*k);
+      colr.setZ(i,colr.getZ(i)*(1-k)+tgt.b*k);
+    }
+  }
+  colr.needsUpdate=true;
+}
+
+function spawnMotes(x,y,z,col,n){
+  for(let i=0;i<n;i++){
+    const m=new THREE.Mesh(new THREE.SphereGeometry(0.10,5,5),
+      new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.95}));
+    m.position.set(x+(rng()-0.5)*2.5,y,z+(rng()-0.5)*2.5);
+    scene.add(m);
+    motes.push({m,vy:0.7+rng()*1.6,vx:(rng()-0.5)*0.7,vz:(rng()-0.5)*0.7,
+      life:3.5+rng()*3.5,mx:7});
+  }
+}
+
+// World mood evolves with life: sky warms, exposure rises, bloom intensifies
+function liftWorldMood(){
+  const L=Math.min(1,worldLife);
+  renderer.toneMappingExposure=0.55+L*0.45;
+  bloomPass.strength=0.6+L*0.95;
+  ambient.intensity=0.55+L*0.45;
+  ambient.color.setHSL(0.62-L*0.46,0.30+L*0.20,0.32+L*0.30);
+  sunLight.intensity=0.4+L*1.4;
+  sunLight.color.setHSL(0.62-L*0.5,0.30+L*0.25,0.55+L*0.25);
+  scene.fog.density=0.014-L*0.009;
+  // sky transitions toward warm dawn → sunrise → vibrant day
+  setSkyParams({
+    turbidity:8-L*5,
+    rayleigh:0.5+L*2.5,
+    mieCoefficient:0.005+L*0.010,
+    mieDirectionalG:0.7+L*0.15,
+    elevation:6+L*32,
+    azimuth:140-L*30
+  });
+}
+
+// ============================================================================
+//   AUDIO — Tone.js generative music (rich pads + harp arpeggios)
+// ============================================================================
+let toneStarted=false, harpSynth, padSynth, bassSynth, choirSynth, reverb;
+const PENT=[0,2,4,7,9,12,14,16,19,21];   // pentatonic semitones
+const ROOT_MIDI=53;                       // F3 → warm, hopeful
+
+function audioInit(){
+  // Tone.js needs a user gesture to start AudioContext
+  document.addEventListener('pointerdown',startTone,{once:true});
+  document.addEventListener('keydown',startTone,{once:true});
+  document.addEventListener('touchstart',startTone,{once:true});
+}
+
+function startTone(){
+  if(toneStarted)return;
+  toneStarted=true;
+  try{
+    Tone.start();
+    // master reverb — gives everything a cathedral-like depth
+    reverb=new Tone.Reverb({decay:6,wet:0.5}).toDestination();
+    // Pad: warm, slow attack — the breath of the world
+    padSynth=new Tone.PolySynth(Tone.Synth,{
+      oscillator:{type:'sine'},
+      envelope:{attack:2.5,decay:1,sustain:0.7,release:4}
+    }).connect(reverb);
+    padSynth.volume.value=-22;
+    // Harp: bright plucked, for blooms
+    harpSynth=new Tone.PolySynth(Tone.Synth,{
+      oscillator:{type:'triangle'},
+      envelope:{attack:0.005,decay:0.4,sustain:0.05,release:1.4}
+    }).connect(reverb);
+    harpSynth.volume.value=-14;
+    // Soft bass — fundament
+    bassSynth=new Tone.Synth({
+      oscillator:{type:'sine'},
+      envelope:{attack:1.5,decay:0.5,sustain:0.6,release:3}
+    }).connect(reverb);
+    bassSynth.volume.value=-20;
+    // Choir-like — appears as world wakes
+    choirSynth=new Tone.PolySynth(Tone.Synth,{
+      oscillator:{type:'sawtooth'},
+      envelope:{attack:3,decay:1,sustain:0.5,release:5}
+    }).connect(reverb);
+    choirSynth.volume.value=-30;
+
+    // Start a slow ambient pad immediately (the dead world still hums faintly)
+    startAmbient();
+  }catch(e){console.warn('Tone init failed',e);}
+}
+
+function midiToFreq(m){return Tone.Frequency(m,'midi').toFrequency();}
+
+function startAmbient(){
+  // a gentle, slow chord progression that evolves
+  let i=0;
+  setInterval(()=>{
+    if(!toneStarted||!padSynth)return;
+    // chords rooted at F minor → F major-ish as world heals
+    const baseProgression=[
+      [0,3,7,12], [-2,3,7,10], [-4,3,7,12], [-2,5,9,12]
+    ];
+    const chord=baseProgression[i%baseProgression.length];
+    const lifeShift=Math.floor(worldLife*4);  // brighter notes as life grows
+    const notes=chord.map(c=>midiToFreq(ROOT_MIDI+c+lifeShift));
+    padSynth.triggerAttackRelease(notes,'4n');
+    // bass note
+    if(worldLife>0.1)bassSynth.triggerAttackRelease(midiToFreq(ROOT_MIDI-12+lifeShift),'2n');
+    // choir joins when world is alive enough
+    if(worldLife>0.4){
+      const cn=chord.slice(0,2).map(c=>midiToFreq(ROOT_MIDI+12+c+lifeShift));
+      choirSynth.triggerAttackRelease(cn,'2n');
+    }
+    i++;
+  },4500);
+}
+
+function audioBloom(power,n){
+  if(!toneStarted||!harpSynth)return;
+  // ascending pentatonic arpeggio — the "voice" of a bloom
+  const steps=Math.min(7, 3+Math.floor(power));
+  const startIdx=Math.floor(rng()*4);
+  for(let i=0;i<steps;i++){
+    const semi=PENT[(startIdx+i)%PENT.length] + (i>=PENT.length?12:0);
+    setTimeout(()=>{
+      try{harpSynth.triggerAttackRelease(midiToFreq(ROOT_MIDI+12+semi),'8n');}catch(e){}
+    },i*85);
+  }
+  // resonant bass swell for bigger clusters
+  if(n>=3){
+    setTimeout(()=>{
+      try{bassSynth.triggerAttackRelease(midiToFreq(ROOT_MIDI-12),'1n');}catch(e){}
+    },120);
+  }
+  // larger clusters trigger a choir swell
+  if(n>=4 && choirSynth){
+    setTimeout(()=>{
+      try{choirSynth.triggerAttackRelease(
+        [midiToFreq(ROOT_MIDI+12),midiToFreq(ROOT_MIDI+19),midiToFreq(ROOT_MIDI+24)],'2n');
+      }catch(e){}
+    },200);
+  }
+}
+
+// ============================================================================
+//   CLIMAX
+// ============================================================================
+function triggerClimax(seed,bloomCount){
+  if(climaxDone)return;climaxDone=true;
+  // wave of light through all blooms
+  blooms.forEach((b,i)=>setTimeout(()=>{
+    const y=_terrain?_terrain.heightAt(b.x,b.z):0;
+    spawnMotes(b.x,y+1,b.z,b.col,22);
+  },i*35));
+  // huge musical swell
+  if(toneStarted&&harpSynth){
+    [0,4,7,12,16,19,24].forEach((s,i)=>setTimeout(()=>{
+      try{harpSynth.triggerAttackRelease(midiToFreq(ROOT_MIDI+12+s),'2n');}catch(e){}
+    },i*180));
+    if(choirSynth){
+      setTimeout(()=>{
+        try{choirSynth.triggerAttackRelease(
+          [midiToFreq(ROOT_MIDI+12),midiToFreq(ROOT_MIDI+19),midiToFreq(ROOT_MIDI+24),midiToFreq(ROOT_MIDI+28)],'1n');
+        }catch(e){}
+      },300);
+    }
+  }
+  // smooth bloom intensity boost
+  if(bloomPass) bloomPass.strength=2.2;
+  setTimeout(()=>{if(bloomPass)bloomPass.strength=1.6;},3000);
+  const ov=document.getElementById('climax');
+  ov.classList.add('show');
+  requestAnimationFrame(()=>{ov.style.background='rgba(8,8,16,0.5)';
+    document.getElementById('climaxTitle').style.opacity='1';
+    document.getElementById('climaxText').style.opacity='1';
+    const sb=document.getElementById('seedBox');
+    sb.textContent='graine de ce monde · '+seed+'  ·  '+bloomCount+' floraisons';
+    sb.style.opacity='1';
+    ov.querySelector('button').style.opacity='1';});
+}
+
+function hideGuideSoon(){
+  const g=document.getElementById('guide');
+  if(g && !g._h){g._h=true;setTimeout(()=>g.style.opacity='0',4000);}
+}
+
+// ============================================================================
+//   INPUT
+// ============================================================================
+const keys={};
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;
+  if(e.code==='Space'){singing=true;e.preventDefault();}});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;
+  if(e.code==='Space')singing=false;});
+let touchId=-1,tBaseX=0,tBaseY=0,tDX=0,tDY=0;
+function bindTouch(){
+  const cEl=document.getElementById('c');
+  cEl.addEventListener('touchstart',e=>{e.preventDefault();
+    const t=e.changedTouches[0];touchId=t.identifier;tBaseX=t.clientX;tBaseY=t.clientY;
+    tDX=0;tDY=0;singing=true;},{passive:false});
+  cEl.addEventListener('touchmove',e=>{e.preventDefault();
+    for(const t of e.changedTouches)if(t.identifier===touchId){
+      let dx=t.clientX-tBaseX,dy=t.clientY-tBaseY,d=Math.hypot(dx,dy),m=70;
+      if(d>m){dx=dx/d*m;dy=dy/d*m;}tDX=dx/m;tDY=dy/m;}},{passive:false});
+  cEl.addEventListener('touchend',e=>{e.preventDefault();
+    for(const t of e.changedTouches)if(t.identifier===touchId){
+      touchId=-1;tDX=0;tDY=0;singing=false;}},{passive:false});
+}
+bindTouch();
+
+// ============================================================================
+//   MAIN LOOP
+// ============================================================================
+let netT=0;
+function loop(){
+  requestAnimationFrame(loop);
+  if(!started)return;
+  const dt=Math.min(0.05,clock.getDelta());
+  const t=clock.elapsedTime;
+
+  // movement (smooth, floaty)
+  let ix=0,iz=0;
+  if(keys['w']||keys['z']||keys['arrowup'])iz-=1;
+  if(keys['s']||keys['arrowdown'])iz+=1;
+  if(keys['a']||keys['q']||keys['arrowleft'])ix-=1;
+  if(keys['d']||keys['arrowright'])ix+=1;
+  if(touchId>=0){ix=tDX;iz=tDY;}
+  const im=Math.hypot(ix,iz);if(im>1){ix/=im;iz/=im;}
+  const SPD=15;
+  me.vx+=(ix*SPD-me.vx)*Math.min(1,dt*5);
+  me.vz+=(iz*SPD-me.vz)*Math.min(1,dt*5);
+  me.x+=me.vx*dt;me.z+=me.vz*dt;
+  me.x=Math.max(-120,Math.min(120,me.x));
+  me.z=Math.max(-120,Math.min(120,me.z));
+
+  const gy=_terrain?_terrain.heightAt(me.x,me.z):0;
+  myMesh.position.set(me.x,gy+1.8+Math.sin(t*1.6)*0.20,me.z);
+  // singing → bigger, brighter pulse
+  const pulse=singing?1.0+Math.sin(t*9)*0.22:1.0;
+  myMesh.userData.core.scale.setScalar(pulse);
+  myMesh.userData.halo.material.opacity=singing?0.36:0.18;
+  myMesh.userData.light.intensity=singing?3.2:2.0;
+  myMesh.userData.disc.material.opacity=singing?0.30:0.15;
+
+  // camera — gentle follow, higher angle to show the world
+  const camTarget=new THREE.Vector3(me.x,gy+11,me.z+17);
+  camera.position.lerp(camTarget,Math.min(1,dt*2.5));
+  camera.lookAt(me.x,gy+1.5,me.z);
+
+  // peers
+  for(const id in peers){
+    if(id===myId)continue;
+    const p=peers[id];
+    if(!peerMeshes[id]){
+      const hue=p.hue!=null?p.hue:0.6;
+      const col=new THREE.Color().setHSL(hue,0.7,0.65).getHex();
+      peerMeshes[id]=makePresence(col);
+      scene.add(peerMeshes[id]);
+    }
+    const pm=peerMeshes[id];
+    const py=_terrain?_terrain.heightAt(p.x,p.z):0;
+    pm.position.lerp(new THREE.Vector3(p.x,py+1.8+Math.sin(t*1.6+1)*0.2,p.z),
+      Math.min(1,dt*8));
+    const sg=p.singing;
+    pm.userData.halo.material.opacity=sg?0.36:0.18;
+    pm.userData.light.intensity=sg?3.2:2.0;
+    pm.userData.core.scale.setScalar(sg?1+Math.sin(t*9)*0.22:1);
+    pm.userData.disc.material.opacity=sg?0.3:0.15;
+  }
+  for(const id in peerMeshes){
+    if(!peers[id]){scene.remove(peerMeshes[id]);delete peerMeshes[id];}
+  }
+
+  // bloom growth + canopy sway
+  for(const b of blooms){
+    if(b.grow<1){
+      b.grow=Math.min(1,b.grow+dt*0.7);
+      const e=1-Math.pow(1-b.grow,3);
+      b.group.scale.setScalar(e);
+    }
+    if(b.ring) b.ring.material.opacity=0.4+Math.sin(t*2+b.x*0.1)*0.15;
+    // sway tree canopies
+    b.group.traverse(ch=>{
+      if(ch.userData&&ch.userData.base!=null){
+        ch.position.y=ch.userData.base+Math.sin(t*1.3+ch.userData.swayPhase)*0.12;
+      }
+    });
+  }
+
+  // motes
+  for(let i=motes.length-1;i>=0;i--){
+    const o=motes[i];o.life-=dt;
+    o.m.position.x+=o.vx*dt;o.m.position.y+=o.vy*dt;o.m.position.z+=o.vz*dt;
+    o.vy-=dt*0.25;
+    o.m.material.opacity=Math.max(0,o.life/o.mx)*0.95;
+    if(o.life<=0){scene.remove(o.m);motes.splice(i,1);}
+  }
+
+  // smooth life bar
+  displayLife+=(worldLife-displayLife)*Math.min(1,dt*2);
+  document.getElementById('life-fill').style.width=(displayLife*100)+'%';
+  liftWorldMood();
+
+  // network (10Hz)
+  netT+=dt;
+  if(netT>0.1){netT=0;
+    if(socket)socket.emit('input',{x:me.x,z:me.z,singing});}
+
+  // render WITH post-processing (bloom)
+  composer.render(dt);
+}
+</script>
+</body>
+</html>
