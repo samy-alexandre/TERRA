@@ -192,8 +192,9 @@ let _terrain=null;
 let motes=[];
 
 // ============================================================================
-//   ASSET LOADER — loads real .glb/.gltf models with procedural fallback
+//   ASSET LOADER — loads real .glb/.gltf models from GitHub Release
 // ============================================================================
+const ASSETS_BASE_URL='https://github.com/samy-alexandre/TERRA/releases/download/assets-v1/';
 const ASSETS={
   trees:[
     {file:'BirchTree_1.gltf', scale:0.5},
@@ -237,20 +238,19 @@ function loadAllAssets(onDone){
   let remaining=allItems.length;
   const checkDone=()=>{
     remaining--;
+    document.getElementById('loader').textContent=
+      'chargement des modèles… '+(assetsAttemptedCount-remaining)+'/'+assetsAttemptedCount;
     if(remaining<=0){assetsReady=true;onDone();}
   };
 
   allItems.forEach(item=>{
     loader.load(
-      'assets/nature/'+item.file,
+      ASSETS_BASE_URL+item.file,
       gltf=>{
-        // success — extract and prep the model
         const root=gltf.scene;
         root.traverse(o=>{
           if(o.isMesh){
-            // ensure emissive material so bloom catches the foliage
             if(o.material && o.material.color){
-              // boost foliage brightness
               const name=(o.name||'').toLowerCase();
               const matName=(o.material.name||'').toLowerCase();
               if(name.includes('leaves')||name.includes('leaf')||
@@ -269,15 +269,14 @@ function loadAllAssets(onDone){
       },
       undefined,
       err=>{
-        // failed — silently skip, fallback will handle it
-        console.warn('asset failed:', item.file);
+        console.warn('asset failed:', item.file, err);
         checkDone();
       }
     );
   });
 
-  // Hard timeout safety net
-  setTimeout(()=>{if(!assetsReady){assetsReady=true;onDone();}}, 12000);
+  // Hard timeout safety net (30s — release URLs can be slow on first hit)
+  setTimeout(()=>{if(!assetsReady){assetsReady=true;onDone();}}, 30000);
 }
 
 function cloneAsset(cat){
