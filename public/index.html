@@ -41,8 +41,15 @@ button.primary{border-color:rgba(180,210,255,.5);color:#fff}
 #code-tag{position:absolute;top:20px;left:50%;transform:translateX(-50%);
   font-weight:300;font-size:.78rem;letter-spacing:.34em;color:rgba(200,210,240,.4);text-transform:uppercase}
 #code-tag b{color:rgba(220,225,255,.75);font-weight:500;letter-spacing:.42em}
-#peers{position:absolute;top:20px;right:24px;font-weight:300;font-size:.78rem;
+#peers{position:absolute;top:20px;right:60px;font-weight:300;font-size:.78rem;
   letter-spacing:.18em;color:rgba(200,210,240,.4)}
+#quitBtn{position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;
+  background:rgba(20,20,32,.5);backdrop-filter:blur(10px);border:1px solid rgba(180,200,255,.2);
+  color:rgba(220,225,255,.7);font-size:1.3rem;font-family:'Jost';cursor:pointer;
+  display:flex;align-items:center;justify-content:center;pointer-events:auto;
+  transition:all .3s;padding:0;line-height:1}
+#quitBtn:hover{background:rgba(180,80,80,.3);color:#fff;border-color:rgba(255,180,180,.5);
+  letter-spacing:0;width:36px}
 #life-wrap{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);
   width:min(420px,76vw);text-align:center}
 #life-label{font-weight:300;font-size:.72rem;letter-spacing:.42em;text-transform:uppercase;
@@ -107,13 +114,14 @@ button.primary{border-color:rgba(180,210,255,.5);color:#fff}
 <div id="hud">
   <div id="code-tag">monde <b id="codeShow">····</b></div>
   <div id="peers">· 1 ·</div>
+  <button id="quitBtn" onclick="quitToMenu()">×</button>
   <div id="guide">approchez un autre voyageur et maintenez <b>ESPACE</b> / <b>toucher</b> pour chanter</div>
   <div id="life-wrap">
     <div id="life-label">vie du monde</div>
     <div id="life-track"><div id="life-fill"></div></div>
   </div>
 </div>
-<div class="controls-note" id="ctrlNote">déplacement : ZQSD / flèches / glisser &nbsp;·&nbsp; chant : ESPACE / toucher maintenu</div>
+<div class="controls-note" id="ctrlNote">déplacement : ZQSD &nbsp;·&nbsp; caméra : clic-glisser souris (ou 2e doigt) &nbsp;·&nbsp; chant : ESPACE / toucher &nbsp;·&nbsp; quitter : ECHAP</div>
 <div class="toast" id="toast"></div>
 
 <div id="climax">
@@ -133,6 +141,7 @@ button.primary{border-color:rgba(180,210,255,.5);color:#fff}
 <script src="lib/ShaderPass.js"></script>
 <script src="lib/UnrealBloomPass.js"></script>
 <script src="lib/Sky.js"></script>
+<script src="lib/GLTFLoader.js"></script>
 <script src="lib/simplex-noise.js"></script>
 <script src="lib/Tone.js"></script>
 
@@ -182,11 +191,117 @@ let sky, sunDir, ambient, sunLight;
 let _terrain=null;
 let motes=[];
 
+// ============================================================================
+//   ASSET LOADER — loads real .glb/.gltf models with procedural fallback
+// ============================================================================
+const ASSETS={
+  trees:[
+    {file:'BirchTree_1.gltf', scale:0.5},
+    {file:'BirchTree_2.gltf', scale:0.5},
+    {file:'MapleTree_1.gltf', scale:0.5},
+    {file:'MapleTree_3.gltf', scale:0.5},
+    {file:'PineTree_1.gltf',  scale:0.5}
+  ],
+  deadTrees:[
+    {file:'DeadTree_1.gltf', scale:0.5},
+    {file:'DeadTree_4.gltf', scale:0.5},
+    {file:'DeadTree_7.gltf', scale:0.5}
+  ],
+  bushes:[
+    {file:'Bush_Large.gltf',         scale:0.6},
+    {file:'Bush_Large_Flowers.gltf', scale:0.6}
+  ],
+  flowers:[
+    {file:'Flower_1_Clump.gltf', scale:0.7},
+    {file:'Flower_3_Clump.gltf', scale:0.7}
+  ],
+  grass:[
+    {file:'Grass_Large.gltf', scale:0.6}
+  ]
+};
+const LOADED_MODELS={}; // category -> array of {model, scale}
+let assetsReady=false;
+let assetsLoadedCount=0;
+let assetsAttemptedCount=0;
+
+function loadAllAssets(onDone){
+  const loader=new THREE.GLTFLoader();
+  const allItems=[];
+  for(const cat in ASSETS){
+    LOADED_MODELS[cat]=[];
+    for(const item of ASSETS[cat]) allItems.push({cat, ...item});
+  }
+  assetsAttemptedCount=allItems.length;
+  if(allItems.length===0){assetsReady=true;onDone();return;}
+
+  let remaining=allItems.length;
+  const checkDone=()=>{
+    remaining--;
+    if(remaining<=0){assetsReady=true;onDone();}
+  };
+
+  allItems.forEach(item=>{
+    loader.load(
+      'assets/nature/'+item.file,
+      gltf=>{
+        // success — extract and prep the model
+        const root=gltf.scene;
+        root.traverse(o=>{
+          if(o.isMesh){
+            // ensure emissive material so bloom catches the foliage
+            if(o.material && o.material.color){
+              // boost foliage brightness
+              const name=(o.name||'').toLowerCase();
+              const matName=(o.material.name||'').toLowerCase();
+              if(name.includes('leaves')||name.includes('leaf')||
+                 matName.includes('leaves')||matName.includes('leaf')||
+                 name.includes('flower')||matName.includes('flower')){
+                o.material.emissive=o.material.color.clone();
+                o.material.emissiveIntensity=0.35;
+              }
+            }
+            o.castShadow=false;o.receiveShadow=false;
+          }
+        });
+        LOADED_MODELS[item.cat].push({model:root, scale:item.scale});
+        assetsLoadedCount++;
+        checkDone();
+      },
+      undefined,
+      err=>{
+        // failed — silently skip, fallback will handle it
+        console.warn('asset failed:', item.file);
+        checkDone();
+      }
+    );
+  });
+
+  // Hard timeout safety net
+  setTimeout(()=>{if(!assetsReady){assetsReady=true;onDone();}}, 12000);
+}
+
+function cloneAsset(cat){
+  const list=LOADED_MODELS[cat];
+  if(!list || list.length===0) return null;
+  const item=list[Math.floor(rng()*list.length)];
+  // Clone the model so each placement is independent
+  const clone=item.model.clone(true);
+  // Also clone materials so we can tint individually if needed
+  clone.traverse(o=>{ if(o.isMesh && o.material){o.material=o.material.clone();} });
+  clone.scale.setScalar(item.scale);
+  return clone;
+}
+
 waitLibs(()=>{
-  // unhide entry after libs loaded
-  document.getElementById('loader').classList.add('hide');
-  document.getElementById('entry').classList.remove('hidden');
-  // connect socket
+  // libs loaded — now load 3D assets in background
+  document.getElementById('loader').textContent='chargement des modèles…';
+  loadAllAssets(()=>{
+    // assets ready (or timed out)
+    console.log('Assets loaded: '+assetsLoadedCount+'/'+assetsAttemptedCount);
+    document.getElementById('loader').classList.add('hide');
+    document.getElementById('entry').classList.remove('hidden');
+  });
+  // connect socket in parallel
   socket=io();
   socket.on('errmsg',m=>toast(m));
   socket.on('joined',d=>{
@@ -282,6 +397,9 @@ function beginWorld(){
   // ---- TERRAIN (Simplex noise — real organic geometry) ----
   buildTerrain();
 
+  // ---- DEAD WORLD AMBIENCE: scattered dead trees & rocks across the map ----
+  scatterDeadWorld();
+
   // ---- ME (a glowing presence) ----
   myMesh=makePresence(0xa8c8ff);
   scene.add(myMesh);
@@ -298,6 +416,77 @@ function beginWorld(){
   requestAnimationFrame(loop);
 }
 
+function scatterDeadWorld(){
+  // Scatter dead trees and rocks deterministically using seed
+  // (so all clients see the same dead world layout)
+  const sr=mulberry32(SEED^0x600D);
+  // dead trees scattered (use real models if loaded, else procedural)
+  const deadCount=80;
+  for(let i=0;i<deadCount;i++){
+    const x=(sr()-0.5)*WORLD_SIZE*0.95;
+    const z=(sr()-0.5)*WORLD_SIZE*0.95;
+    // avoid central amphitheatre (so the meeting point feels natural)
+    if(Math.hypot(x,z)<35) continue;
+    const y=_terrain.heightAt(x,z);
+    let t=cloneAssetDeterministic('deadTrees',sr);
+    if(t){
+      t.position.set(x,y,z);
+      t.rotation.y=sr()*Math.PI*2;
+      t.scale.multiplyScalar(0.4+sr()*0.5);
+      scene.add(t);
+    } else {
+      // procedural dead tree fallback (just a stark trunk)
+      const g=new THREE.Group();
+      const hgt=2+sr()*2;
+      const trunk=new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08,0.18,hgt,5),
+        new THREE.MeshStandardMaterial({color:0x2a2a32,roughness:1,flatShading:true}));
+      trunk.position.y=y+hgt/2;
+      trunk.rotation.z=(sr()-0.5)*0.2;
+      g.add(trunk);
+      g.position.set(x,0,z);
+      scene.add(g);
+    }
+  }
+  // scattered rocks across the world
+  const rockCount=120;
+  for(let i=0;i<rockCount;i++){
+    const x=(sr()-0.5)*WORLD_SIZE*0.95;
+    const z=(sr()-0.5)*WORLD_SIZE*0.95;
+    const y=_terrain.heightAt(x,z);
+    const scale=0.5+sr()*1.5;
+    const geo=new THREE.IcosahedronGeometry(scale,0);
+    const pos=geo.attributes.position;
+    for(let j=0;j<pos.count;j++){
+      pos.setXYZ(j,
+        pos.getX(j)*(0.7+sr()*0.5),
+        pos.getY(j)*(0.5+sr()*0.6),
+        pos.getZ(j)*(0.7+sr()*0.5));
+    }
+    geo.computeVertexNormals();
+    const shade=0.28+sr()*0.12;
+    const rock=new THREE.Mesh(geo,
+      new THREE.MeshStandardMaterial({
+        color:new THREE.Color(shade,shade*0.96,shade*1.06),
+        roughness:0.95,flatShading:true
+      }));
+    rock.position.set(x,y+scale*0.3,z);
+    rock.rotation.set(sr()*0.4,sr()*Math.PI*2,sr()*0.4);
+    scene.add(rock);
+  }
+}
+
+// deterministic version of cloneAsset for the initial scatter
+function cloneAssetDeterministic(cat,sr){
+  const list=LOADED_MODELS[cat];
+  if(!list || list.length===0) return null;
+  const item=list[Math.floor(sr()*list.length)];
+  const clone=item.model.clone(true);
+  clone.traverse(o=>{ if(o.isMesh && o.material){o.material=o.material.clone();} });
+  clone.scale.setScalar(item.scale);
+  return clone;
+}
+
 function setSkyParams(p){
   const u=sky.material.uniforms;
   u.turbidity.value=p.turbidity;
@@ -312,23 +501,32 @@ function setSkyParams(p){
 }
 
 // ============================================================================
-//   TERRAIN — simplex noise heightmap with desaturated palette
+//   TERRAIN — simplex noise heightmap, much bigger and more varied
 // ============================================================================
+const WORLD_SIZE=500, WORLD_HALF=WORLD_SIZE/2-5;
 function buildTerrain(){
-  const SIZE=260, SEG=170;
+  const SIZE=WORLD_SIZE, SEG=220;
   const g=new THREE.PlaneGeometry(SIZE,SIZE,SEG,SEG);
   g.rotateX(-Math.PI/2);
   const noiseA=new SimplexNoise(mulberry32(SEED));
   const noiseB=new SimplexNoise(mulberry32(SEED^0x12345));
+  const noiseC=new SimplexNoise(mulberry32(SEED^0xABCDE));
   const pos=g.attributes.position;
   const colors=[];
   function h(x,z){
-    // multi-octave simplex — natural rolling terrain
+    // Multi-octave with more dramatic features
     let y=0;
-    y+=noiseA.noise2D(x*0.012,z*0.012)*9;
-    y+=noiseA.noise2D(x*0.04, z*0.04)*2.5;
-    y+=noiseB.noise2D(x*0.08,z*0.08)*1.2;
-    y+=noiseB.noise2D(x*0.18,z*0.18)*0.4;
+    // Big mountains/valleys
+    y+=noiseA.noise2D(x*0.005,z*0.005)*22;
+    // Medium hills
+    y+=noiseA.noise2D(x*0.018,z*0.018)*8;
+    // Small bumps
+    y+=noiseB.noise2D(x*0.05, z*0.05)*2.5;
+    // Surface detail
+    y+=noiseB.noise2D(x*0.15,z*0.15)*0.6;
+    // A central depression — natural amphitheatre for gatherings
+    const r=Math.hypot(x,z);
+    if(r<60) y-=Math.cos(r/60*Math.PI*0.5)*4;
     return y;
   }
   for(let i=0;i<pos.count;i++){
@@ -336,7 +534,7 @@ function buildTerrain(){
     const y=h(x,z);
     pos.setY(i,y);
     // dead palette: cool desaturated grey, slight variation
-    const v=0.16+(noiseA.noise2D(x*0.06,z*0.06)*0.5+0.5)*0.06;
+    const v=0.14+(noiseC.noise2D(x*0.04,z*0.04)*0.5+0.5)*0.08;
     colors.push(v*0.95, v*1.0, v*1.18);
   }
   g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
@@ -378,108 +576,380 @@ function makePresence(color){
 }
 
 // ============================================================================
-//   BLOOM — life awakens (procedural flora cluster + terrain heal)
+//   BLOOM — life awakens (rich procedural flora: trees, bushes, rocks, grass)
 // ============================================================================
 function spawnBloom(x,z,power,instant){
   const y=_terrain?_terrain.heightAt(x,z):0;
   const grp=new THREE.Group();
   grp.position.set(x,y,z);
 
-  const hue=0.28+rng()*0.20;                   // green→teal range
-  const baseCol=new THREE.Color().setHSL(hue,0.55,0.5);
+  const hue=0.28+rng()*0.22;                   // green→teal→blue-green range
+  const baseCol=new THREE.Color().setHSL(hue,0.6,0.55);
+  const accentHue=(hue+0.5+rng()*0.15)%1;      // complementary for flowers
+  const accentCol=new THREE.Color().setHSL(accentHue,0.85,0.65);
 
-  // Multiple trees clustered around the bloom centre
-  const trees=Math.min(14, 3+Math.floor(power*1.5));
-  for(let i=0;i<trees;i++){
-    const a=rng()*Math.PI*2, rad=rng()*(power*1.1+0.5);
-    const tx=Math.cos(a)*rad, tz=Math.sin(a)*rad;
-    grp.add(makeTree(tx,tz,hue,power));
+  const radius = 2 + power * 1.3;
+
+  // === BIG TREES (centerpieces) — try real model first, fallback to procedural ===
+  const bigTrees = Math.min(8, 2+Math.floor(power*0.8));
+  for(let i=0;i<bigTrees;i++){
+    const a=rng()*Math.PI*2, r=rng()*radius*0.7;
+    const tx=Math.cos(a)*r, tz=Math.sin(a)*r;
+    const real=cloneAsset('trees');
+    if(real){
+      real.position.set(tx,0,tz);
+      real.rotation.y=rng()*Math.PI*2;
+      real.scale.multiplyScalar(0.8+rng()*0.5);
+      // mark canopy meshes for sway
+      real.traverse(o=>{
+        if(o.isMesh){
+          const n=(o.name||'').toLowerCase()+(o.material&&o.material.name?o.material.name.toLowerCase():'');
+          if(n.includes('leaves')||n.includes('leaf')){
+            o.userData.baseY=o.position.y;
+            o.userData.swayPhase=rng()*Math.PI*2;
+            o.userData.isCanopy=true;
+          }
+        }
+      });
+      grp.add(real);
+    } else {
+      grp.add(makeTreeBig(tx, tz, hue, power));
+    }
   }
-
-  // Glowing wildflowers
-  const flowers=Math.min(40,8+Math.floor(power*5));
+  // === SMALLER TREES (variety) ===
+  const smallTrees = Math.min(12, 3+Math.floor(power*1.5));
+  for(let i=0;i<smallTrees;i++){
+    const a=rng()*Math.PI*2, r=radius*0.4 + rng()*radius*0.9;
+    const tx=Math.cos(a)*r, tz=Math.sin(a)*r;
+    const real=cloneAsset('trees');
+    if(real){
+      real.position.set(tx,0,tz);
+      real.rotation.y=rng()*Math.PI*2;
+      real.scale.multiplyScalar(0.5+rng()*0.4);
+      grp.add(real);
+    } else {
+      const type = Math.floor(rng()*3);
+      if(type===0) grp.add(makeTreePine(tx, tz, hue));
+      else if(type===1) grp.add(makeTreeBushy(tx, tz, hue));
+      else grp.add(makeTreeWillow(tx, tz, hue));
+    }
+  }
+  // === BUSHES ===
+  const bushes = Math.min(20, 5+Math.floor(power*2.5));
+  for(let i=0;i<bushes;i++){
+    const a=rng()*Math.PI*2, r=rng()*radius*1.3;
+    const tx=Math.cos(a)*r, tz=Math.sin(a)*r;
+    const real=cloneAsset('bushes');
+    if(real){
+      real.position.set(tx,0,tz);
+      real.rotation.y=rng()*Math.PI*2;
+      real.scale.multiplyScalar(0.5+rng()*0.5);
+      grp.add(real);
+    } else {
+      grp.add(makeBush(tx, tz, hue));
+    }
+  }
+  // === MUSHROOMS (always procedural — charming) ===
+  const mushrooms = Math.min(15, 3+Math.floor(power*2));
+  for(let i=0;i<mushrooms;i++){
+    const a=rng()*Math.PI*2, r=rng()*radius*1.2;
+    grp.add(makeMushroom(Math.cos(a)*r, Math.sin(a)*r, accentHue));
+  }
+  // === ROCKS (procedural — looks good already) ===
+  const rocks = Math.min(10, 2+Math.floor(power*1.5));
+  for(let i=0;i<rocks;i++){
+    const a=rng()*Math.PI*2, r=rng()*radius*1.4;
+    grp.add(makeRock(Math.cos(a)*r, Math.sin(a)*r));
+  }
+  // === FLOWERS ===
+  const flowers = Math.min(60, 12+Math.floor(power*8));
   for(let i=0;i<flowers;i++){
-    const a=rng()*Math.PI*2, rad=rng()*power*1.5;
-    const fx=Math.cos(a)*rad, fz=Math.sin(a)*rad;
-    grp.add(makeFlower(fx,fz,hue));
+    const a=rng()*Math.PI*2, r=rng()*radius*1.6;
+    const tx=Math.cos(a)*r, tz=Math.sin(a)*r;
+    const real=cloneAsset('flowers');
+    if(real && rng()<0.4){  // mix real flower clumps with small procedural ones
+      real.position.set(tx,0,tz);
+      real.rotation.y=rng()*Math.PI*2;
+      real.scale.multiplyScalar(0.4+rng()*0.3);
+      grp.add(real);
+    } else {
+      grp.add(makeFlower(tx, tz, accentHue));
+    }
+  }
+  // === GRASS PATCHES ===
+  const grassReal=cloneAsset('grass');
+  if(grassReal){
+    // scatter several grass clumps
+    const cnt=4+Math.floor(power);
+    for(let i=0;i<cnt;i++){
+      const a=rng()*Math.PI*2, r=rng()*radius*1.4;
+      const gr=cloneAsset('grass');
+      if(gr){
+        gr.position.set(Math.cos(a)*r, 0, Math.sin(a)*r);
+        gr.rotation.y=rng()*Math.PI*2;
+        gr.scale.multiplyScalar(0.4+rng()*0.4);
+        grp.add(gr);
+      }
+    }
+  } else {
+    const grassCount = Math.min(80, 20+Math.floor(power*10));
+    grp.add(makeGrassPatch(grassCount, radius*1.5, hue));
   }
 
-  // Bright ground ring (will bloom intensely with post-processing)
+  // === GROUND RING (the bloom signature) ===
   const ring=new THREE.Mesh(
-    new THREE.RingGeometry(0.1,power*1.8,48),
+    new THREE.RingGeometry(0.1,radius,48),
     new THREE.MeshBasicMaterial({color:baseCol,transparent:true,opacity:0.55,
       side:THREE.DoubleSide,depthWrite:false}));
   ring.rotation.x=-Math.PI/2;ring.position.y=0.05;
   grp.add(ring);
 
-  // Soft warm point light
-  const gl=new THREE.PointLight(baseCol.getHex(),power*0.7,power*8);
-  gl.position.y=2.5;grp.add(gl);
+  // === LIGHT ===
+  const gl=new THREE.PointLight(baseCol.getHex(),power*0.8,power*10);
+  gl.position.y=3;grp.add(gl);
 
   grp.scale.setScalar(instant?1:0.001);
   scene.add(grp);
   blooms.push({x,z,power,grow:instant?1:0,group:grp,ring,col:baseCol,hue});
 
-  // Heal terrain locally
-  healTerrain(x,z,power*2.6,hue);
-
-  // Burst of light motes
-  spawnMotes(x,y+1,z,baseCol,Math.floor(16+power*5));
+  healTerrain(x,z,power*3, hue);
+  spawnMotes(x,y+1,z,baseCol,Math.floor(20+power*6));
 }
 
-function makeTree(x,z,hue,power){
-  const g=new THREE.Group();
-  g.position.set(x,0,z);
-  // Trunk: tapered cylinder
-  const hgt=1.8+rng()*power*0.6;
-  const trunkCol=new THREE.Color().setHSL(0.07+rng()*0.04,0.4,0.18);
+function makeTreeBig(x,z,hue,power){
+  const g=new THREE.Group(); g.position.set(x,0,z);
+  // Trunk: tapered, slightly curved
+  const hgt=3 + rng()*power*0.8;
+  const trunkCol=new THREE.Color().setHSL(0.07+rng()*0.04, 0.45, 0.18);
   const trunk=new THREE.Mesh(
-    new THREE.CylinderGeometry(0.08,0.20,hgt,7),
-    new THREE.MeshStandardMaterial({color:trunkCol,roughness:1}));
+    new THREE.CylinderGeometry(0.15, 0.35, hgt, 8),
+    new THREE.MeshStandardMaterial({color:trunkCol,roughness:0.95,flatShading:true}));
   trunk.position.y=hgt/2;
+  trunk.rotation.z=(rng()-0.5)*0.15; // slight lean
   g.add(trunk);
-  // Canopy: 1-3 stacked icosahedrons for organic feel
-  const layers=1+Math.floor(rng()*2);
-  for(let i=0;i<=layers;i++){
-    const r=0.55+rng()*0.55-i*0.08;
-    const ch=hgt+0.4+i*0.55;
-    const cHue=hue+(rng()-0.5)*0.08;
-    const cCol=new THREE.Color().setHSL(cHue,0.55+rng()*0.15,0.45+rng()*0.15);
+  // Layered organic canopy (3-4 spheres for depth)
+  const layers = 3+Math.floor(rng()*2);
+  for(let i=0;i<layers;i++){
+    const r = 1.4 - i*0.2 + rng()*0.4;
+    const cy = hgt + 0.5 + i*0.7;
+    const off = (i>0) ? (rng()-0.5)*0.6 : 0;
+    const cHue = hue + (rng()-0.5)*0.06;
+    const cCol = new THREE.Color().setHSL(cHue, 0.6+rng()*0.15, 0.45+rng()*0.15);
     const canopy=new THREE.Mesh(
-      new THREE.IcosahedronGeometry(r,0),
+      new THREE.IcosahedronGeometry(r, 1),  // detail 1 = more organic
       new THREE.MeshStandardMaterial({
-        color:cCol,
-        emissive:cCol,
-        emissiveIntensity:0.45,
-        roughness:0.85,
-        flatShading:true
+        color:cCol, emissive:cCol, emissiveIntensity:0.4,
+        roughness:0.85, flatShading:true
       }));
-    canopy.position.y=ch;
-    canopy.userData.base=ch;
+    canopy.position.set(off, cy, off*0.5);
+    canopy.scale.y = 0.85 + rng()*0.25;
+    canopy.userData.base=cy;
     canopy.userData.swayPhase=rng()*Math.PI*2;
     g.add(canopy);
   }
   return g;
 }
 
-function makeFlower(x,z,hue){
-  const g=new THREE.Group();
-  g.position.set(x,0,z);
+function makeTreePine(x,z,hue){
+  const g=new THREE.Group(); g.position.set(x,0,z);
+  // Tall thin trunk
+  const hgt=2.2 + rng()*1.5;
+  const trunkCol=new THREE.Color().setHSL(0.06, 0.4, 0.15);
+  const trunk=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.14, hgt, 6),
+    new THREE.MeshStandardMaterial({color:trunkCol,roughness:1}));
+  trunk.position.y=hgt/2;
+  g.add(trunk);
+  // Stacked cones — pine shape
+  const cones = 3 + Math.floor(rng()*2);
+  for(let i=0;i<cones;i++){
+    const r = 0.9 - i*0.18;
+    const ch = hgt - 0.4 + i*0.7;
+    const cHue=hue-0.05+rng()*0.05;
+    const cCol=new THREE.Color().setHSL(cHue, 0.65, 0.35+rng()*0.1);
+    const c=new THREE.Mesh(
+      new THREE.ConeGeometry(r, 1.2, 6),
+      new THREE.MeshStandardMaterial({
+        color:cCol, emissive:cCol, emissiveIntensity:0.3,
+        roughness:0.9, flatShading:true
+      }));
+    c.position.y=ch;
+    c.userData.base=ch;
+    c.userData.swayPhase=rng()*Math.PI*2;
+    g.add(c);
+  }
+  return g;
+}
+
+function makeTreeBushy(x,z,hue){
+  const g=new THREE.Group(); g.position.set(x,0,z);
+  const hgt=1.6 + rng()*1;
+  const trunk=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.08, 0.15, hgt, 5),
+    new THREE.MeshStandardMaterial({color:0x4a3624,roughness:1}));
+  trunk.position.y=hgt/2;
+  g.add(trunk);
+  // Round dense canopy (multiple overlapping spheres)
+  const blobs = 4 + Math.floor(rng()*3);
+  for(let i=0;i<blobs;i++){
+    const ang=rng()*Math.PI*2, rad=rng()*0.4;
+    const cHue=hue+(rng()-0.5)*0.1;
+    const cCol=new THREE.Color().setHSL(cHue, 0.55+rng()*0.2, 0.48+rng()*0.12);
+    const c=new THREE.Mesh(
+      new THREE.SphereGeometry(0.6+rng()*0.4, 7, 6),
+      new THREE.MeshStandardMaterial({
+        color:cCol, emissive:cCol, emissiveIntensity:0.35,
+        roughness:0.9, flatShading:true
+      }));
+    c.position.set(Math.cos(ang)*rad, hgt+0.4+rng()*0.3, Math.sin(ang)*rad);
+    c.userData.base=c.position.y;
+    c.userData.swayPhase=rng()*Math.PI*2;
+    g.add(c);
+  }
+  return g;
+}
+
+function makeTreeWillow(x,z,hue){
+  const g=new THREE.Group(); g.position.set(x,0,z);
+  const hgt=3.5 + rng()*1.2;
+  const trunk=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.10, 0.22, hgt, 6),
+    new THREE.MeshStandardMaterial({color:0x3a2818,roughness:1}));
+  trunk.position.y=hgt/2;
+  g.add(trunk);
+  // Drooping canopy made of elongated spheres
+  const wisps = 6+Math.floor(rng()*4);
+  for(let i=0;i<wisps;i++){
+    const ang=(i/wisps)*Math.PI*2 + (rng()-0.5)*0.3;
+    const rad=1.2+rng()*0.4;
+    const cHue=hue+0.05+(rng()-0.5)*0.05;
+    const cCol=new THREE.Color().setHSL(cHue, 0.6, 0.55);
+    const c=new THREE.Mesh(
+      new THREE.SphereGeometry(0.4, 6, 6),
+      new THREE.MeshStandardMaterial({
+        color:cCol, emissive:cCol, emissiveIntensity:0.35,
+        roughness:0.85, flatShading:true
+      }));
+    c.position.set(Math.cos(ang)*rad, hgt-0.2+rng()*0.4, Math.sin(ang)*rad);
+    c.scale.set(0.7, 1.6, 0.7);  // elongated, drooping
+    c.userData.base=c.position.y;
+    c.userData.swayPhase=rng()*Math.PI*2;
+    c.userData.swayAmp=0.25;
+    g.add(c);
+  }
+  return g;
+}
+
+function makeBush(x,z,hue){
+  const g=new THREE.Group(); g.position.set(x,0,z);
+  const blobs = 2+Math.floor(rng()*3);
+  for(let i=0;i<blobs;i++){
+    const ang=rng()*Math.PI*2, rad=rng()*0.35;
+    const r = 0.35+rng()*0.3;
+    const cHue=hue+(rng()-0.5)*0.1;
+    const cCol=new THREE.Color().setHSL(cHue, 0.5+rng()*0.2, 0.35+rng()*0.15);
+    const b=new THREE.Mesh(
+      new THREE.SphereGeometry(r, 6, 5),
+      new THREE.MeshStandardMaterial({
+        color:cCol, emissive:cCol, emissiveIntensity:0.2,
+        roughness:0.95, flatShading:true
+      }));
+    b.position.set(Math.cos(ang)*rad, r*0.7, Math.sin(ang)*rad);
+    g.add(b);
+  }
+  return g;
+}
+
+function makeMushroom(x,z,accentHue){
+  const g=new THREE.Group(); g.position.set(x,0,z);
   // Stem
   const stem=new THREE.Mesh(
-    new THREE.CylinderGeometry(0.02,0.03,0.4,4),
-    new THREE.MeshStandardMaterial({color:0x4a5a3a,roughness:1}));
-  stem.position.y=0.2;
+    new THREE.CylinderGeometry(0.06, 0.09, 0.25, 6),
+    new THREE.MeshStandardMaterial({color:0xeae8e0, roughness:0.7,
+      emissive:0x222020, emissiveIntensity:0.2}));
+  stem.position.y=0.125;
   g.add(stem);
-  // Petal blob (glowing) - shift hue from leaves for contrast
-  const pHue=(hue+0.45+rng()*0.2)%1;
-  const pCol=new THREE.Color().setHSL(pHue,0.85,0.6);
+  // Cap (glowing!)
+  const capHue=(accentHue+rng()*0.1)%1;
+  const capCol=new THREE.Color().setHSL(capHue, 0.8, 0.55);
+  const cap=new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 8, 6, 0, Math.PI*2, 0, Math.PI/2),
+    new THREE.MeshStandardMaterial({
+      color:capCol, emissive:capCol, emissiveIntensity:0.6,
+      roughness:0.5, flatShading:true
+    }));
+  cap.position.y=0.27;
+  cap.scale.y=0.7;
+  g.add(cap);
+  return g;
+}
+
+function makeRock(x,z){
+  const g=new THREE.Group(); g.position.set(x,0,z);
+  const scale = 0.4 + rng()*0.8;
+  const rockGeom = new THREE.IcosahedronGeometry(scale, 0);
+  // distort it a bit
+  const pos=rockGeom.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    pos.setXYZ(i,
+      pos.getX(i)*(0.8+rng()*0.4),
+      pos.getY(i)*(0.6+rng()*0.5),
+      pos.getZ(i)*(0.8+rng()*0.4));
+  }
+  rockGeom.computeVertexNormals();
+  const greyShade = 0.30+rng()*0.15;
+  const rock=new THREE.Mesh(rockGeom,
+    new THREE.MeshStandardMaterial({
+      color:new THREE.Color(greyShade, greyShade*0.95, greyShade*1.05),
+      roughness:0.95, flatShading:true
+    }));
+  rock.position.y=scale*0.4;
+  rock.rotation.set(rng()*0.4, rng()*Math.PI*2, rng()*0.4);
+  g.add(rock);
+  return g;
+}
+
+function makeFlower(x,z,accentHue){
+  const g=new THREE.Group();g.position.set(x,0,z);
+  const stem=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.015,0.025,0.35,4),
+    new THREE.MeshStandardMaterial({color:0x4a5a3a,roughness:1}));
+  stem.position.y=0.175;
+  g.add(stem);
+  const pHue=(accentHue+(rng()-0.5)*0.15+1)%1;
+  const pCol=new THREE.Color().setHSL(pHue,0.9,0.65);
   const petals=new THREE.Mesh(
-    new THREE.SphereGeometry(0.09,6,6),
-    new THREE.MeshBasicMaterial({color:pCol}));
-  petals.position.y=0.45;
+    new THREE.SphereGeometry(0.08,6,5),
+    new THREE.MeshStandardMaterial({
+      color:pCol, emissive:pCol, emissiveIntensity:0.7,
+      roughness:0.5
+    }));
+  petals.position.y=0.4;
   g.add(petals);
   return g;
+}
+
+function makeGrassPatch(count, radius, hue){
+  // Instanced mesh for efficient rendering of many grass blades
+  const bladeGeo = new THREE.PlaneGeometry(0.05, 0.4);
+  bladeGeo.translate(0, 0.2, 0);
+  const cHue = hue + (rng()-0.5)*0.05;
+  const grassCol = new THREE.Color().setHSL(cHue, 0.55, 0.4);
+  const bladeMat = new THREE.MeshStandardMaterial({
+    color: grassCol, emissive: grassCol, emissiveIntensity:0.25,
+    side: THREE.DoubleSide, roughness:1, alphaTest: 0.5
+  });
+  const inst = new THREE.InstancedMesh(bladeGeo, bladeMat, count);
+  const dummy = new THREE.Object3D();
+  for(let i=0;i<count;i++){
+    const a=rng()*Math.PI*2, r=Math.sqrt(rng())*radius;
+    dummy.position.set(Math.cos(a)*r, 0, Math.sin(a)*r);
+    dummy.rotation.y = rng()*Math.PI*2;
+    dummy.scale.y = 0.6 + rng()*0.8;
+    dummy.updateMatrix();
+    inst.setMatrixAt(i, dummy.matrix);
+  }
+  return inst;
 }
 
 function healTerrain(cx,cz,radius,hue){
@@ -678,29 +1148,76 @@ function hideGuideSoon(){
   if(g && !g._h){g._h=true;setTimeout(()=>g.style.opacity='0',4000);}
 }
 
+// camera state (orbit around player)
+let camYaw=0, camPitch=0.3, camYawTarget=0, camPitchTarget=0.3;
+let mouseDown=false, lastMX=0, lastMY=0;
+
 // ============================================================================
 //   INPUT
 // ============================================================================
 const keys={};
 addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;
-  if(e.code==='Space'){singing=true;e.preventDefault();}});
+  if(e.code==='Space'){singing=true;e.preventDefault();}
+  if(e.key==='Escape'&&started)quitToMenu();});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;
   if(e.code==='Space')singing=false;});
+
+// Mouse camera (PC)
+addEventListener('mousedown',e=>{
+  if(!started || e.target.tagName==='BUTTON' || e.target.tagName==='INPUT')return;
+  mouseDown=true;lastMX=e.clientX;lastMY=e.clientY;
+});
+addEventListener('mouseup',()=>mouseDown=false);
+addEventListener('mousemove',e=>{
+  if(!mouseDown)return;
+  const dx=e.clientX-lastMX, dy=e.clientY-lastMY;
+  lastMX=e.clientX;lastMY=e.clientY;
+  camYawTarget-=dx*0.005;
+  camPitchTarget=Math.max(-0.3,Math.min(0.8,camPitchTarget-dy*0.004));
+});
+
+// touch — distinguish single-finger move (joystick) vs two-finger camera
 let touchId=-1,tBaseX=0,tBaseY=0,tDX=0,tDY=0;
+let camTouchId=-1, lastCTX=0, lastCTY=0;
 function bindTouch(){
   const cEl=document.getElementById('c');
   cEl.addEventListener('touchstart',e=>{e.preventDefault();
-    const t=e.changedTouches[0];touchId=t.identifier;tBaseX=t.clientX;tBaseY=t.clientY;
-    tDX=0;tDY=0;singing=true;},{passive:false});
+    for(const t of e.changedTouches){
+      if(touchId===-1 && t.clientX<innerWidth/2){
+        // left half = joystick
+        touchId=t.identifier;tBaseX=t.clientX;tBaseY=t.clientY;
+        tDX=0;tDY=0;singing=true;
+      } else if(camTouchId===-1 && t.clientX>=innerWidth/2){
+        // right half = camera
+        camTouchId=t.identifier;lastCTX=t.clientX;lastCTY=t.clientY;
+      }
+    }
+  },{passive:false});
   cEl.addEventListener('touchmove',e=>{e.preventDefault();
-    for(const t of e.changedTouches)if(t.identifier===touchId){
-      let dx=t.clientX-tBaseX,dy=t.clientY-tBaseY,d=Math.hypot(dx,dy),m=70;
-      if(d>m){dx=dx/d*m;dy=dy/d*m;}tDX=dx/m;tDY=dy/m;}},{passive:false});
+    for(const t of e.changedTouches){
+      if(t.identifier===touchId){
+        let dx=t.clientX-tBaseX,dy=t.clientY-tBaseY,d=Math.hypot(dx,dy),m=70;
+        if(d>m){dx=dx/d*m;dy=dy/d*m;}tDX=dx/m;tDY=dy/m;
+      } else if(t.identifier===camTouchId){
+        const dx=t.clientX-lastCTX, dy=t.clientY-lastCTY;
+        lastCTX=t.clientX;lastCTY=t.clientY;
+        camYawTarget-=dx*0.006;
+        camPitchTarget=Math.max(-0.3,Math.min(0.8,camPitchTarget-dy*0.005));
+      }
+    }
+  },{passive:false});
   cEl.addEventListener('touchend',e=>{e.preventDefault();
-    for(const t of e.changedTouches)if(t.identifier===touchId){
-      touchId=-1;tDX=0;tDY=0;singing=false;}},{passive:false});
+    for(const t of e.changedTouches){
+      if(t.identifier===touchId){touchId=-1;tDX=0;tDY=0;singing=false;}
+      if(t.identifier===camTouchId){camTouchId=-1;}
+    }
+  },{passive:false});
 }
 bindTouch();
+
+function quitToMenu(){
+  location.reload();
+}
 
 // ============================================================================
 //   MAIN LOOP
@@ -712,7 +1229,7 @@ function loop(){
   const dt=Math.min(0.05,clock.getDelta());
   const t=clock.elapsedTime;
 
-  // movement (smooth, floaty)
+  // input dir (relative to camera direction so "W" = "forward where I'm looking")
   let ix=0,iz=0;
   if(keys['w']||keys['z']||keys['arrowup'])iz-=1;
   if(keys['s']||keys['arrowdown'])iz+=1;
@@ -720,12 +1237,16 @@ function loop(){
   if(keys['d']||keys['arrowright'])ix+=1;
   if(touchId>=0){ix=tDX;iz=tDY;}
   const im=Math.hypot(ix,iz);if(im>1){ix/=im;iz/=im;}
-  const SPD=15;
-  me.vx+=(ix*SPD-me.vx)*Math.min(1,dt*5);
-  me.vz+=(iz*SPD-me.vz)*Math.min(1,dt*5);
+  // rotate input by current camera yaw
+  const cs=Math.cos(camYaw), sn=Math.sin(camYaw);
+  const worldX = ix*cs - iz*sn;
+  const worldZ = ix*sn + iz*cs;
+  const SPD=18;
+  me.vx+=(worldX*SPD-me.vx)*Math.min(1,dt*5);
+  me.vz+=(worldZ*SPD-me.vz)*Math.min(1,dt*5);
   me.x+=me.vx*dt;me.z+=me.vz*dt;
-  me.x=Math.max(-120,Math.min(120,me.x));
-  me.z=Math.max(-120,Math.min(120,me.z));
+  me.x=Math.max(-WORLD_HALF,Math.min(WORLD_HALF,me.x));
+  me.z=Math.max(-WORLD_HALF,Math.min(WORLD_HALF,me.z));
 
   const gy=_terrain?_terrain.heightAt(me.x,me.z):0;
   myMesh.position.set(me.x,gy+1.8+Math.sin(t*1.6)*0.20,me.z);
@@ -736,10 +1257,17 @@ function loop(){
   myMesh.userData.light.intensity=singing?3.2:2.0;
   myMesh.userData.disc.material.opacity=singing?0.30:0.15;
 
-  // camera — gentle follow, higher angle to show the world
-  const camTarget=new THREE.Vector3(me.x,gy+11,me.z+17);
-  camera.position.lerp(camTarget,Math.min(1,dt*2.5));
-  camera.lookAt(me.x,gy+1.5,me.z);
+  // camera — orbit-style follow (mouse/touch can rotate around player)
+  const cy=_terrain?_terrain.heightAt(me.x,me.z):0;
+  // smooth target rotation
+  camYaw+=(camYawTarget-camYaw)*Math.min(1,dt*5);
+  camPitch+=(camPitchTarget-camPitch)*Math.min(1,dt*5);
+  const camDist=18, camHeight=8+Math.sin(camPitch)*9;
+  const camX=me.x+Math.sin(camYaw)*camDist*Math.cos(camPitch);
+  const camZ=me.z+Math.cos(camYaw)*camDist*Math.cos(camPitch);
+  const camY=cy+camHeight;
+  camera.position.lerp(new THREE.Vector3(camX,camY,camZ),Math.min(1,dt*4));
+  camera.lookAt(me.x,cy+1.5,me.z);
 
   // peers
   for(const id in peers){
