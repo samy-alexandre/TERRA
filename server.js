@@ -15,6 +15,47 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ============================================================================
+//  ASSET PROXY — relays GitHub Release files to the browser with proper CORS.
+//  GitHub releases don't send Access-Control-Allow-Origin, so we fetch
+//  server-side (no CORS issues server-to-server) and serve back same-origin.
+// ============================================================================
+const ASSET_WHITELIST_PREFIX='https://github.com/samy-alexandre/TERRA/releases/download/';
+const assetCache=new Map();   // url -> Buffer (in-memory cache)
+
+app.get('/asset', async (req,res)=>{
+  const url=req.query.url;
+  if(!url || typeof url!=='string' || !url.startsWith(ASSET_WHITELIST_PREFIX)){
+    return res.status(400).send('invalid url');
+  }
+  // Serve from cache if we already fetched it
+  if(assetCache.has(url)){
+    const c=assetCache.get(url);
+    res.set('Content-Type',c.ct);
+    res.set('Cache-Control','public, max-age=86400');
+    res.set('Access-Control-Allow-Origin','*');
+    return res.send(c.body);
+  }
+  try{
+    const r=await fetch(url,{redirect:'follow'});
+    if(!r.ok) return res.status(r.status).send('upstream '+r.status);
+    const buf=Buffer.from(await r.arrayBuffer());
+    const ct=r.headers.get('content-type')||'application/octet-stream';
+    // Cache (limit total cache size to ~150MB to avoid memory blowup)
+    if(buf.length<8*1024*1024){
+      let total=0;assetCache.forEach(v=>total+=v.body.length);
+      if(total<150*1024*1024) assetCache.set(url,{body:buf,ct});
+    }
+    res.set('Content-Type',ct);
+    res.set('Cache-Control','public, max-age=86400');
+    res.set('Access-Control-Allow-Origin','*');
+    res.send(buf);
+  } catch(e){
+    console.error('proxy error',url,e.message);
+    res.status(500).send('proxy error');
+  }
+});
+
 const rooms = {};
 
 function makeCode() {
