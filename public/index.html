@@ -192,9 +192,15 @@ let _terrain=null;
 let motes=[];
 
 // ============================================================================
-//   ASSET LOADER — loads real .glb/.gltf models from GitHub Release
+//   ASSET LOADER — loads .gltf models from GitHub Release via our OWN server
+//   The server.js has an /asset endpoint that fetches from GitHub server-side
+//   (no CORS) and serves it back same-origin. Reliable, cached, no rate limit.
 // ============================================================================
-const ASSETS_BASE_URL='https://github.com/samy-alexandre/TERRA/releases/download/assets-v1/';
+const GITHUB_RELEASE='https://github.com/samy-alexandre/TERRA/releases/download/assets-v1/';
+function proxify(url){
+  // Route through our own server's /asset endpoint
+  return '/asset?url='+encodeURIComponent(url);
+}
 const ASSETS={
   trees:[
     {file:'BirchTree_1.gltf', scale:0.5},
@@ -226,7 +232,16 @@ let assetsLoadedCount=0;
 let assetsAttemptedCount=0;
 
 function loadAllAssets(onDone){
-  const loader=new THREE.GLTFLoader();
+  // LoadingManager that rewrites every URL to go through the CORS proxy
+  const manager=new THREE.LoadingManager();
+  manager.setURLModifier(url=>{
+    // Only proxy github URLs; leave others (like data: URIs) alone
+    if(url.startsWith('https://github.com/')||url.startsWith('http://github.com/')){
+      return proxify(url);
+    }
+    return url;
+  });
+  const loader=new THREE.GLTFLoader(manager);
   const allItems=[];
   for(const cat in ASSETS){
     LOADED_MODELS[cat]=[];
@@ -245,7 +260,7 @@ function loadAllAssets(onDone){
 
   allItems.forEach(item=>{
     loader.load(
-      ASSETS_BASE_URL+item.file,
+      GITHUB_RELEASE+item.file,  // real GitHub URL; modifier rewrites just-in-time
       gltf=>{
         const root=gltf.scene;
         root.traverse(o=>{
@@ -275,8 +290,7 @@ function loadAllAssets(onDone){
     );
   });
 
-  // Hard timeout safety net (30s — release URLs can be slow on first hit)
-  setTimeout(()=>{if(!assetsReady){assetsReady=true;onDone();}}, 30000);
+  setTimeout(()=>{if(!assetsReady){assetsReady=true;onDone();}}, 45000);
 }
 
 function cloneAsset(cat){
@@ -1228,7 +1242,8 @@ function loop(){
   const dt=Math.min(0.05,clock.getDelta());
   const t=clock.elapsedTime;
 
-  // input dir (relative to camera direction so "W" = "forward where I'm looking")
+  // input dir — WORLD ABSOLUTE: W = always world -Z, regardless of camera
+  // (camera = pure viewpoint; turning it doesn't redirect the character)
   let ix=0,iz=0;
   if(keys['w']||keys['z']||keys['arrowup'])iz-=1;
   if(keys['s']||keys['arrowdown'])iz+=1;
@@ -1236,13 +1251,9 @@ function loop(){
   if(keys['d']||keys['arrowright'])ix+=1;
   if(touchId>=0){ix=tDX;iz=tDY;}
   const im=Math.hypot(ix,iz);if(im>1){ix/=im;iz/=im;}
-  // rotate input by current camera yaw
-  const cs=Math.cos(camYaw), sn=Math.sin(camYaw);
-  const worldX = ix*cs - iz*sn;
-  const worldZ = ix*sn + iz*cs;
   const SPD=18;
-  me.vx+=(worldX*SPD-me.vx)*Math.min(1,dt*5);
-  me.vz+=(worldZ*SPD-me.vz)*Math.min(1,dt*5);
+  me.vx+=(ix*SPD-me.vx)*Math.min(1,dt*5);
+  me.vz+=(iz*SPD-me.vz)*Math.min(1,dt*5);
   me.x+=me.vx*dt;me.z+=me.vz*dt;
   me.x=Math.max(-WORLD_HALF,Math.min(WORLD_HALF,me.x));
   me.z=Math.max(-WORLD_HALF,Math.min(WORLD_HALF,me.z));
