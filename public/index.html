@@ -123,18 +123,18 @@ button.primary{border-color:rgba(180,210,255,.5);color:#fff}
   <button onclick="location.reload()">recommencer ailleurs</button>
 </div>
 
-<!-- LIBRARIES (CDN, all open source, browser-compatible UMD builds) -->
+<!-- LIBRARIES — bundled locally in /lib/ (no CDN dependency, always works) -->
 <script src="/socket.io/socket.io.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/postprocessing/EffectComposer.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/postprocessing/RenderPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/postprocessing/ShaderPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/shaders/CopyShader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/objects/Sky.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/simplex-noise@3.0.1/simplex-noise.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
+<script src="lib/three.min.js"></script>
+<script src="lib/CopyShader.js"></script>
+<script src="lib/LuminosityHighPassShader.js"></script>
+<script src="lib/EffectComposer.js"></script>
+<script src="lib/RenderPass.js"></script>
+<script src="lib/ShaderPass.js"></script>
+<script src="lib/UnrealBloomPass.js"></script>
+<script src="lib/Sky.js"></script>
+<script src="lib/simplex-noise.js"></script>
+<script src="lib/Tone.js"></script>
 
 <script>
 // ============================================================================
