@@ -1,0 +1,16 @@
+{
+  "name": "terra",
+  "version": "1.0.0",
+  "description": "A cooperative world-rebirth experience",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "simplex-noise": "^3.0.1",
+    "socket.io": "^4.7.5",
+    "three": "^0.140.0",
+    "tone": "^14.7.77"
+  }
+}
